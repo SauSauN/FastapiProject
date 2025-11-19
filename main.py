@@ -1,81 +1,17 @@
-# ------------------------------
-# IMPORTATIONS
-# ------------------------------
-from fastapi import FastAPI, HTTPException  # FastAPI pour créer l'API, HTTPException pour gérer les erreurs
-from pydantic import BaseModel  # BaseModel pour valider les données JSON envoyées dans le body
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, create_engine  # SQLAlchemy pour la base
-from sqlalchemy.orm import sessionmaker, declarative_base, relationship  # ORM pour créer les tables et relations
+# main.py
 
-import config
+from fastapi import FastAPI, HTTPException
+from database import SessionLocal, engine, Base
+from models import Client, Produit, Commande, ClientModel, ProduitModel, CommandeModel
 
-# ------------------------------
-# CONFIGURATION POSTGRESQL
-# ------------------------------
-engine = create_engine(config.DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
-Base = declarative_base()
-
-# ------------------------------
-# DEFINITION DES TABLES AVEC SQLALCHEMY
-# ------------------------------
-
-class Client(Base):
-    """Table clients avec id, nom, email, ville et relation avec commandes"""
-    __tablename__ = "clients"
-    id = Column(Integer, primary_key=True)
-    nom = Column(String)
-    email = Column(String)
-    ville = Column(String)
-    commandes = relationship("Commande", back_populates="client")  # Relation avec la table commandes
-
-class Produit(Base):
-    """Table produits avec id, nom, prix, stock et relation avec commandes"""
-    __tablename__ = "produits"
-    id = Column(Integer, primary_key=True)
-    nom = Column(String)
-    prix = Column(Float)
-    stock = Column(Integer)
-    commandes = relationship("Commande", back_populates="produit")  # Relation avec la table commandes
-
-class Commande(Base):
-    """Table commandes avec id, id_client, id_produit, quantite et relations"""
-    __tablename__ = "commandes"
-    id = Column(Integer, primary_key=True)
-    id_client = Column(Integer, ForeignKey("clients.id"))
-    id_produit = Column(Integer, ForeignKey("produits.id"))
-    quantite = Column(Integer)
-    client = relationship("Client", back_populates="commandes")  # Relation vers client
-    produit = relationship("Produit", back_populates="commandes")  # Relation vers produit
-
-# Création des tables dans la base
+# Création des tables
 Base.metadata.create_all(engine)
 
-# ------------------------------
-# MODELES PYDANTIC (VALIDATION DES DONNEES)
-# ------------------------------
-
-class ClientModel(BaseModel):
-    """Modèle pour valider les données JSON d'un client"""
-    nom: str
-    email: str
-    ville: str
-
-class ProduitModel(BaseModel):
-    """Modèle pour valider les données JSON d'un produit"""
-    nom: str
-    prix: float
-    stock: int
-
-class CommandeModel(BaseModel):
-    """Modèle pour valider les données JSON d'une commande"""
-    id_client: int
-    id_produit: int
-    quantite: int
+app = FastAPI(title="API Gestion DB")
 
 # ------------------------------
-# CREATION DE L'APPLICATION FASTAPI
+# ROUTES GÉNÉRALES
 # ------------------------------
-app = FastAPI(title="API Gestion DB")  # Nom de l'API
 
 @app.get("/")
 def read_root():
@@ -160,7 +96,7 @@ def delete_client(client_id: int):
 # ------------------------------
 # ROUTES PRODUITS
 # ------------------------------
-
+       
 @app.post("/produits")
 def create_produit(produit: ProduitModel):
     """Crée un produit"""
@@ -267,5 +203,49 @@ def liste_commandes():
     db = SessionLocal()
     try:
         return db.query(Commande).all()
+    finally:
+        db.close()
+
+# ------------------------------
+# ROUTES SELECT
+# ------------------------------
+
+@app.get("/select/produits/{id_client}")
+def get_produit_achete(id_client: int):
+    """
+    Retourne les produits achetés par un client donné.
+    Utilise une jointure entre les tables Commande et Produit.
+    """
+    db = SessionLocal()
+    try:
+        commandes = db.query(Commande).filter(Commande.id_client == id_client).all()
+        if not commandes:
+            raise HTTPException(404, "Aucune commande trouvée pour ce client")
+        produits_achetes = []
+        for cmd in commandes:
+            produit = db.query(Produit).filter(Produit.id == cmd.id_produit).first()
+            if produit:
+                produits_achetes.append(produit)
+        return produits_achetes
+    finally:
+        db.close()
+
+@app.get("/select/clients/{id_produit}")
+def get_clients_ayant_achete(id_produit: int):
+    """
+    Retourne les clients ayant acheté un produit donné.
+    Utilise une jointure entre les tables Commande et Client.
+    """
+    db = SessionLocal()
+    try:
+        commandes = db.query(Commande).filter(Commande.id_produit == id_produit).all()
+        if not commandes:
+            raise HTTPException(404, "Aucune commande trouvée pour ce produit")
+        clients_acheteurs = []
+        for cmd in commandes:
+            client = db.query(Client).filter(Client.id == cmd.id_client).first()
+            if client:
+                clients_acheteurs.append(client)
+        return clients_acheteurs
     finally:
         db.close()
