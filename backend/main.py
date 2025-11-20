@@ -1,6 +1,7 @@
 # main.py
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from database import SessionLocal, engine, Base
 from models import Client, Produit, Commande, ClientModel, ProduitModel, CommandeModel
 
@@ -8,6 +9,18 @@ from models import Client, Produit, Commande, ClientModel, ProduitModel, Command
 Base.metadata.create_all(engine)
 
 app = FastAPI(title="API Gestion DB")
+
+# -------------------------------------------
+# 2. AJOUTER CE BLOC JUSTE APRÈS app = FastAPI()
+# -------------------------------------------
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Autorise toutes les origines (Frontend React)
+    allow_credentials=True,
+    allow_methods=["*"],  # Autorise toutes les méthodes (GET, POST, PUT, DELETE, OPTIONS)
+    allow_headers=["*"],  # Autorise tous les headers
+)
+# -------------------------------------------
 
 # ------------------------------
 # ROUTES GÉNÉRALES
